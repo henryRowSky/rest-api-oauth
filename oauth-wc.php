@@ -9,29 +9,43 @@ if ($this->request->is('post')) {
 		'x-wc-webhook-event'=>$this->request->header('x-wc-webhook-event'),
 		'x-wc-webhook-signature'=>$this->request->header('x-wc-webhook-signature'),
     );
+	
+    /*/ 
+    Sanitize early	
+    Sanitize often /*/
+    foreach ($headers as $k=>$v) {
+         $headers[$k] = sanitizeIt($v);
+    }
+	
     /*/
     Use Hook Source value from header
     to determine source and determine which WooCoommerce store sent the payload
     then query for correct config values /*/
-	$hook_src = $headers['x-wc-webhook-source'];
+    $hook_src = $headers['x-wc-webhook-source'];
     
+    /*/ The oAuth methods are in an object /*/
     $oauthObj = new Oauth();
     
     /*/ 
-    Send the request source, the needed headers and payload 
-    If the signature provided in the headers mathes the hashed secret key
-    from the correct source then it's OK to continuing processing the payload /*/
+    If the signature provided in the headers matches the hashed secret key
+    from the correct source then it's OK to continuing processing the payload 
+    Send the request source, the needed headers /*/
     if ($oauthObj->authRequest($hook_src, $headers)) {
-	    // Get incoming payload
+	// Get incoming payload
         $data = file_get_contents("php://input");
         // Send data to a method that will process the new order
         $this->add_order($data, $headers);}
     }
 }
+
+function sanitizeIt($dirtyVal) {
+	return filter_input(INPUT_GET, $dirtyVal, FILTER_SANITIZE_SPECIAL_CHARS);
+}
+
 class Oauth {
     public function authRequest($hook_src, $headers) {
-	    $conds = array('conditions' => array('Stores.wc_hook_source' => $hook_src), 'fields' => array('Stores.wc_created_secret', 'Stores.wc_updated_secret'));
-	    $this->loadModel('Stores');	
+	$conds = array('conditions' => array('Stores.wc_hook_source' => $hook_src), 'fields' => array('Stores.wc_created_secret', 'Stores.wc_updated_secret'));
+	$this->loadModel('Stores');	
         $store = $this->Stores->find('first', $conds);
         // Get the secret key value that will be used to generate the hash value
         $wc_secret = getSecret($store);
